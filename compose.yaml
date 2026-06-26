@@ -1,0 +1,66 @@
+services:
+  data_retrieval:
+    build: ./data_retrieval
+    restart: "no"
+    environment:
+      DATA_RETRIEVAL_LOG_FILE: /app/logs/data_retrieval.log
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - backend
+
+  option_metrics:
+    build: ./option_metrics
+    restart: "no"
+    environment:
+      OPTION_METRICS_LOG_FILE: /app/logs/option_metrics.log
+    depends_on:
+      data_retrieval:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - backend
+
+  app:
+    build: ./app
+    environment:
+      APP_LOG_FILE: /app/logs/app.log
+      APP_ACCESS_LOG_FILE: /app/logs/app-access.log
+      APP_ERROR_LOG_FILE: /app/logs/app.log
+    depends_on:
+      option_metrics:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    expose:
+      - "8050"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - backend
+
+  nginx:
+    build: ./nginx
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/htpasswd:/etc/nginx/.htpasswd:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - backend
+
+networks:
+  backend:

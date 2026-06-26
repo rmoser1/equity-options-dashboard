@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Equity Options container stack daily
+
+[Timer]
+OnCalendar=*-*-* 20:00:00
+Persistent=true
+Unit=equity-options-daily.service
+
+[Install]
+WantedBy=timers.target
