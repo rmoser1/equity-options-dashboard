@@ -1,0 +1,7 @@
+pandas==2.2.2
+pyarrow==24.0.0
+plotly==5.22.0 
+dash==4.0.0
+dash_ag_grid==33.3.3
+gunicorn==26.0.0
+pytest==9.0.3

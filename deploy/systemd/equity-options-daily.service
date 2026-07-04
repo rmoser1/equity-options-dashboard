@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Equity Options container startup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/equity-options
+ExecStart=/opt/equity-options/scripts/daily-startup.sh
+TimeoutStartSec=6h

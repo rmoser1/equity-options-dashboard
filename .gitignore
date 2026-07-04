@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__
+data/
+certs
+htpasswd
+test.ipynb
+*.log
+.pytest_cache
+.vscode
+docs/_build/
+tmp
