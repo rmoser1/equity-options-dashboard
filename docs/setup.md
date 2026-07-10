@@ -81,11 +81,12 @@ The Compose stack is ordered so the batch jobs finish before the dashboard
 starts:
 
 ```text
-data_retrieval -> option_metrics -> app -> nginx
+data_retrieval -> dashboard_data -> option_metrics -> app -> nginx
 ```
 
-The `data_retrieval` and `option_metrics` services are one-shot jobs. For a
-fresh stack startup, `app` and `nginx` start after both jobs complete.
+The `data_retrieval`, `dashboard_data`, and `option_metrics` services are
+one-shot jobs. For a fresh stack startup, `app` and `nginx` start after all
+batch jobs complete.
 
 ## Daily systemd Automation
 
@@ -95,13 +96,14 @@ The project includes a daily startup script and systemd unit templates:
 - `deploy/systemd/equity-options-daily.service`
 - `deploy/systemd/equity-options-daily.timer`
 
-The script runs from the project root, rebuilds images, runs the two batch jobs
+The script runs from the project root, rebuilds images, runs the batch jobs
 while the existing dashboard stays online, then recreates `app` and `nginx` so
 the dashboard loads the refreshed parquet files:
 
 ```bash
-docker compose build data_retrieval option_metrics app nginx
+docker compose build data_retrieval dashboard_data option_metrics app nginx
 docker compose run --rm --no-deps data_retrieval
+docker compose run --rm --no-deps dashboard_data
 docker compose run --rm --no-deps option_metrics
 docker compose up -d --no-deps --force-recreate app
 docker compose up -d --no-deps --force-recreate nginx
@@ -186,6 +188,7 @@ View persistent project log files:
 
 ```bash
 tail -f logs/data_retrieval.log
+tail -f logs/dashboard_data.log
 tail -f logs/option_metrics.log
 tail -f logs/app.log
 tail -f logs/app-access.log
@@ -197,6 +200,7 @@ View container stdout/stderr logs:
 
 ```bash
 docker compose logs data_retrieval
+docker compose logs dashboard_data
 docker compose logs option_metrics
 docker compose logs app
 docker compose logs nginx

@@ -10,13 +10,28 @@ services:
     networks:
       - backend
 
+  dashboard_data:
+    build: ./data_retrieval
+    restart: "no"
+    command: ["python", "dashboard_data_main.py"]
+    environment:
+      DASHBOARD_DATA_LOG_FILE: /app/logs/dashboard_data.log
+    depends_on:
+      data_retrieval:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - backend
+
   option_metrics:
     build: ./option_metrics
     restart: "no"
     environment:
       OPTION_METRICS_LOG_FILE: /app/logs/option_metrics.log
     depends_on:
-      data_retrieval:
+      dashboard_data:
         condition: service_completed_successfully
     volumes:
       - ./data:/app/data

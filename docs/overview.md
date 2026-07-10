@@ -9,7 +9,8 @@ Black-Scholes-Merton metrics, and serves an interactive Dash app behind Nginx.
 
 | Service | Source | Role |
 | --- | --- | --- |
-| `data_retrieval` | `data_retrieval/` | Downloads OCC and yfinance data, stores SQLite rows, and writes dashboard parquet files. |
+| `data_retrieval` | `data_retrieval/` | Downloads OCC and yfinance data and stores SQLite rows. |
+| `dashboard_data` | `data_retrieval/` | Exports dashboard parquet files from SQLite. |
 | `option_metrics` | `option_metrics/` | Adds implied volatility and Greeks to the latest option-contract parquet data. |
 | `app` | `app/` | Serves the Dash dashboard with Gunicorn. |
 | `nginx` | `nginx/` | Handles SSL, basic auth, and reverse proxying to the app service. |
@@ -17,7 +18,7 @@ Black-Scholes-Merton metrics, and serves an interactive Dash app behind Nginx.
 Startup order:
 
 ```text
-data_retrieval -> option_metrics -> app -> nginx
+data_retrieval -> dashboard_data -> option_metrics -> app -> nginx
 ```
 
 The batch services write shared files under `data/`, and the app reads the
@@ -28,7 +29,9 @@ resulting parquet bundle at startup.
 ```text
 OCC + yfinance
   -> data_retrieval
-  -> SQLite + dashboard parquet
+  -> SQLite
+  -> dashboard_data
+  -> dashboard parquet
   -> option_metrics
   -> Dash app
   -> Nginx
@@ -51,7 +54,7 @@ logs/
 ## Repository Map
 
 ```text
-data_retrieval/      Data ingestion, SQLite storage, and dashboard parquet export.
+data_retrieval/      Data ingestion, SQLite storage, and dashboard parquet export code.
 option_metrics/      Option metric calculation pipeline.
 app/                 Dash dashboard.
 nginx/               Reverse proxy image and configuration.

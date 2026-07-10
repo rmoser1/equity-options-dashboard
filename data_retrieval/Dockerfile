@@ -4,6 +4,7 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV DATA_DIR=/app/data
 ENV DATA_RETRIEVAL_LOG_FILE=/app/logs/data_retrieval.log
+ENV DASHBOARD_DATA_LOG_FILE=/app/logs/dashboard_data.log
 
 COPY requirements.txt .
 
@@ -11,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py"]
+CMD ["python", "etl_main.py"]

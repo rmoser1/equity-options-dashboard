@@ -2,7 +2,8 @@
 
 `data_retrieval` is the market-data retrieval service for the larger application. It
 fetches underlyings, option chains, stock metadata, and historical prices,
-stores them in SQLite, then builds parquet datasets for the dashboard layer.
+and stores them in SQLite. The same package also contains the dashboard parquet
+export entry point used by the separate `dashboard_data` service.
 
 For the full project overview, dashboard documentation, and deployment runbook,
 see `docs/`. For the package that enriches this package's parquet output with
@@ -12,8 +13,8 @@ Greeks, see `option_metrics/README.md`.
 
 ```mermaid
 flowchart TD
-    Main[main.py] --> ETL[etl.etl_app.App]
-    Main --> Dashboard[dashboard_data.dashboard_data_app.App]
+    ETLMain[etl_main.py] --> ETL[etl.etl_app.App]
+    DashboardMain[dashboard_data_main.py] --> Dashboard[dashboard_data.dashboard_data_app.App]
 
     ETL --> OCC[OCC pipeline]
     ETL --> Options[Options pipeline]
@@ -31,9 +32,9 @@ flowchart TD
 
 ## What It Does
 
-The main entry point runs two phases:
+The package has two one-shot entry points:
 
-1. **ETL phase**
+1. **`etl_main.py`: ETL phase**
    - Downloads OCC underlyings.
    - Fetches aggregate OCC option volume.
    - Filters underlyings by volume threshold.
@@ -41,7 +42,7 @@ The main entry point runs two phases:
    - Stops option loading when Yahoo has reset option quotes to zero.
    - Inserts SQLModel rows into SQLite.
 
-2. **Dashboard data phase**
+2. **`dashboard_data_main.py`: dashboard data phase**
    - Reads only the SQLite columns and date slices required for each output.
    - Writes dashboard parquet datasets incrementally to keep peak memory lower.
    - Builds the enriched latest-options dataset after the larger passthrough
@@ -171,18 +172,26 @@ From project root:
 
 ```bash
 mkdir -p data logs
-DATA_DIR=data PYTHONPATH=data_retrieval python3 data_retrieval/main.py
+DATA_DIR=data PYTHONPATH=data_retrieval python3 data_retrieval/etl_main.py
+DATA_DIR=data PYTHONPATH=data_retrieval python3 data_retrieval/dashboard_data_main.py
 ```
 
 ## Running With Docker Compose
 
-The root `compose.yaml` defines a `data_retrieval` service that builds this package and
-mounts the shared data folder:
+The root `compose.yaml` defines both `data_retrieval` and `dashboard_data`
+services from this package. They share the data folder but run in separate
+containers:
 
-Run the data retrieval service with:
+Run the ETL service by itself with:
 
 ```bash
-docker compose up data_retrieval
+docker compose run --rm --no-deps data_retrieval
+```
+
+Run the dashboard parquet export service by itself with:
+
+```bash
+docker compose run --rm --no-deps dashboard_data
 ```
 
 See `docs/setup.md` for the complete stack startup order and server deployment
@@ -212,7 +221,8 @@ Contract tests require network access and working upstream providers.
 
 ## Operational Notes
 
-- The entry point runs ETL first, then dashboard parquet generation.
+- `etl_main.py` runs only ETL; `dashboard_data_main.py` runs dashboard parquet
+  generation in a separate process/container.
 - The OCC pipeline uses the previous two business days as the default report
   date and filters symbols by `VOLUME_THRESHOLD`.
 - Run the options pipeline shortly after the U.S. equity market close so
@@ -235,7 +245,8 @@ Contract tests require network access and working upstream providers.
 
 ```text
 data_retrieval/
-  main.py                    # top-level entry point
+  etl_main.py                # ETL entry point
+  dashboard_data_main.py     # dashboard parquet entry point
   config.py                  # runtime configuration
   database.py                # SQLModel database helper
   schemas/                   # SQLModel table schemas
@@ -258,7 +269,7 @@ data_retrieval/
 ## Troubleshooting
 
 - **`ModuleNotFoundError` when running from the repository root**: run with
-  `PYTHONPATH=data_retrieval` or run `python main.py` from inside the
+  `PYTHONPATH=data_retrieval` or run `python etl_main.py` from inside the
   package folder.
 - **No parquet output appears**: confirm `DASHBOARD_DATA_DIR` or `DATA_DIR`
   points to a writable folder.

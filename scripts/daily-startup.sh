@@ -8,9 +8,10 @@ cd "${PROJECT_ROOT}"
 
 mkdir -p data/parquet logs/nginx nginx/certs
 
-docker compose build data_retrieval option_metrics app nginx
+docker compose build data_retrieval dashboard_data option_metrics app nginx
 
 docker compose run --rm --no-deps data_retrieval
+docker compose run --rm --no-deps dashboard_data
 docker compose run --rm --no-deps option_metrics
 
 docker compose up -d --no-deps --force-recreate app

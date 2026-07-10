@@ -9,7 +9,7 @@ SQLite.
 
 ## Dashboard Export
 
-The dashboard data phase reads SQLite tables and writes these parquet files:
+`dashboard_data` reads SQLite tables and writes these parquet files:
 
 ```text
 data/parquet/
