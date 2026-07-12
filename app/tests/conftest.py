@@ -1,7 +1,6 @@
 """Shared fixtures for Dash application tests."""
 
 from pathlib import Path
-import json
 import sys
 
 import pandas as pd
@@ -146,11 +145,22 @@ def write_dashboard_parquet(parquet_dir: Path) -> None:
     ).to_parquet(parquet_dir / "options_last.parquet", index=False)
     pd.DataFrame(
         [
-            _info_row("SPY", "longName", "SPDR S&P 500 ETF Trust"),
-            _info_row("SPY", "marketCap", 1_000_000),
-            _info_row("SPY", "lastFiscalYearEnd", 1784246400),
-            _info_row("MSFT", "longName", "Microsoft Corporation"),
-            _info_row("MSFT", "marketCap", 2_000_000),
+            _info_row(
+                "SPY",
+                "longName",
+                "SPDR S&P 500 ETF Trust",
+                "company_profile",
+            ),
+            _info_row("MSFT", "longName", "Microsoft Corporation", "company_profile"),
+            _info_row("SPY", "country", "United States", "company_profile"),
+            _info_row("SPY", "marketCap", "1,000,000", "valuation"),
+            _info_row("MSFT", "marketCap", "2,000,000", "valuation"),
+            _info_row(
+                "SPY",
+                "lastFiscalYearEnd",
+                "2026-07-17",
+                "dividends_corporate_events",
+            ),
         ]
     ).to_parquet(parquet_dir / "stock_info.parquet", index=False)
     pd.DataFrame(
@@ -211,10 +221,16 @@ def _option_row(
     }
 
 
-def _info_row(stock_symbol: str, item_name: str, item_value) -> dict:
-    """Create one JSON-encoded stock-info row."""
+def _info_row(
+    stock_symbol: str,
+    item_name: str,
+    item_value: str,
+    item_category: str,
+) -> dict:
+    """Create one categorized display-ready stock-info row."""
     return {
         "stockSymbol": stock_symbol,
         "itemName": item_name,
-        "itemValue": json.dumps(item_value),
+        "itemValue": item_value,
+        "itemCategory": item_category,
     }

@@ -6,6 +6,8 @@ datasets and writes them incrementally.
 
 import logging
 
+from dashboard_data.info_item_fields import DIVIDEND_YIELD_NAMES, INFO_ITEM_NAMES
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ class DashboardPipeline:
         """Initialize the dashboard pipeline.
 
         :param repository: Object that provides dashboard dataset loaders.
-        :param transformer: Object that provides ``transform_options_last(...)``.
+        :param transformer: Object that transforms stock info and latest options.
         :param writer: Object that provides ``write_dataset(key, data)``.
         """
         self.repository = repository
@@ -27,7 +29,7 @@ class DashboardPipeline:
     def run(self):
         """Run the dashboard pipeline."""
         self._write_dataset("stocks", self.repository.load_stocks())
-        self._write_dataset("stock_info", self.repository.load_stock_info())
+        self._write_stock_info()
         self._write_dataset("stock_prices", self.repository.load_stock_prices())
         self._write_dataset("options_hist", self.repository.load_options_history())
         self._write_options_last()
@@ -37,12 +39,18 @@ class DashboardPipeline:
         logger.info("Writing dashboard dataset %s with %s rows", key, data.height)
         self.writer.write_dataset(key, data)
 
+    def _write_stock_info(self):
+        """Load, transform, and write configured stock information items."""
+        stock_info = self.repository.load_stock_info(INFO_ITEM_NAMES)
+        stock_info = self.transformer.transform_info_items(stock_info)
+        self._write_dataset("stock_info", stock_info)
+
     def _write_options_last(self):
         """Load, enrich, and write the latest option snapshot."""
         last_trade_date = self.repository.latest_option_trade_date()
         options = self.repository.load_latest_options(last_trade_date)
         last_stock_price = self.repository.load_latest_stock_prices(last_trade_date)
-        stock_info = self.repository.load_stock_info()
+        stock_info = self.repository.load_stock_info(DIVIDEND_YIELD_NAMES)
         interest_rates = self.repository.load_interest_rates()
         options_last = self.transformer.transform_options_last(
             options=options,

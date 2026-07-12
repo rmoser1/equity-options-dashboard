@@ -4,6 +4,8 @@ This module provides :class:`DashboardRepository`, which reads the dashboard
 tables from SQLite as Polars DataFrames through the shared database helper.
 """
 
+import polars as pl
+
 from database import Database
 from sqlalchemy import func
 from schemas.historical_price import HistoricalPrice
@@ -54,9 +56,22 @@ class DashboardRepository:
         """Load underlying rows for the dashboard export."""
         return self.db.read_polars(Underlying)
 
-    def load_stock_info(self):
-        """Load stock metadata rows for the dashboard export."""
-        return self.db.read_polars(StockInfoItem)
+    def load_stock_info(self, item_names: list[str]):
+        """Load only the requested stock metadata rows."""
+        stock_info = self.db.query_polars(
+            select(
+                StockInfoItem.stockSymbol,
+                StockInfoItem.itemName,
+                StockInfoItem.itemValue,
+            ).where(StockInfoItem.itemName.in_(item_names))
+        )
+        return stock_info.cast(
+            {
+                "stockSymbol": pl.String,
+                "itemName": pl.String,
+                "itemValue": pl.String,
+            }
+        )
 
     def load_options_history(self):
         """Load the narrowed option history export columns."""

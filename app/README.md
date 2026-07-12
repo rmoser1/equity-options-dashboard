@@ -46,6 +46,7 @@ The app reads these files from `DASHBOARD_DATA_DIR` or `data/parquet`:
 (`timeToExpiryYears`, `riskFreeRate`, `dividendYield`), and option metric outputs
 (`calculatedImpliedVolatility`, `delta`, `gamma`, `theta`, `vega`, `rho`). The
 contract is checked before the main layout and callbacks are registered.
+`stock_info.parquet` includes the category for each exported stock-info item.
 
 ## Run Locally
 

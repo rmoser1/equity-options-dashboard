@@ -1,17 +1,9 @@
 """Load and prepare parquet-backed data for the Dash application."""
 
-import json
 import logging
-from datetime import datetime
 
 import pandas as pd
 
-from modules.info_item_fields import (
-    FIELDS_BY_CATEGORY,
-    FIELDS_DATE,
-    FIELDS_NUMERIC,
-    FIELDS_STRING,
-)
 from modules.parquet_contract import load_dataset
 
 
@@ -28,22 +20,13 @@ def load_app_data(parquet_folder: str = "data/parquet") -> dict:
     stock_info = load_dataset(parquet_folder, "stock_info")
     stock_prices = load_dataset(parquet_folder, "stock_prices")
 
-    logger.info("Transforming stock info data")
+    logger.info("Preparing stock info controls")
 
-    info_items = FIELDS_NUMERIC + FIELDS_DATE + FIELDS_STRING
-    stock_info["itemValue"] = stock_info["itemValue"].apply(json.loads)
-    stock_info = stock_info[stock_info["itemName"].isin(info_items)]
-    numeric_mask = stock_info["itemName"].isin(FIELDS_NUMERIC)
-    date_mask = stock_info["itemName"].isin(FIELDS_DATE)
-    stock_info.loc[numeric_mask, "itemValue"] = stock_info.loc[
-        numeric_mask,
-        "itemValue",
-    ].map(_format_numeric_info_value)
-    stock_info.loc[date_mask, "itemValue"] = stock_info.loc[
-        date_mask,
-        "itemValue",
-    ].map(_format_date_info_value)
-
+    info_items = stock_info[["itemCategory", "itemName"]].drop_duplicates()
+    info_items_by_category = {
+        category: rows["itemName"].tolist()
+        for category, rows in info_items.groupby("itemCategory", sort=False)
+    }
     logger.info("Creating custom data for components and callbacks")
 
     expiration_dates = pd.to_datetime(options_last["expirationDate"])
@@ -80,16 +63,6 @@ def load_app_data(parquet_folder: str = "data/parquet") -> dict:
         "expiration_dates_dict": expiration_options,
         "stock_tickers_dict": stock_options,
         "relative_strike_price_range": relative_strike_price_range,
-        "info_items_by_category": FIELDS_BY_CATEGORY,
-        "info_items_categories": list(FIELDS_BY_CATEGORY.keys()),
+        "info_items_by_category": info_items_by_category,
+        "info_items_categories": list(info_items_by_category),
     }
-
-
-def _format_numeric_info_value(value) -> str:
-    """Format a numeric stock-info value for display."""
-    return f"{float(value):,.2f}".rstrip("0").rstrip(".")
-
-
-def _format_date_info_value(value) -> str:
-    """Format a Unix timestamp stock-info value for display."""
-    return datetime.fromtimestamp(value).strftime("%Y-%m-%d")

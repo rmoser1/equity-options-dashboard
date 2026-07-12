@@ -70,7 +70,9 @@ DATASETS = {
     ),
     "stock_info": ParquetDataset(
         filename="stock_info.parquet",
-        required_columns=frozenset({"stockSymbol", "itemName", "itemValue"}),
+        required_columns=frozenset(
+            {"stockSymbol", "itemName", "itemValue", "itemCategory"}
+        ),
     ),
     "stock_prices": ParquetDataset(
         filename="stock_prices.parquet",

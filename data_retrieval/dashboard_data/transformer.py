@@ -1,10 +1,54 @@
 """Dashboard data transformation utilities."""
 
+import json
+from datetime import datetime
+
 import polars as pl
+
+from dashboard_data.info_item_fields import (
+    DIVIDEND_YIELD_NAMES,
+    FIELDS_BY_CATEGORY,
+    FIELDS_DATE,
+    FIELDS_NUMERIC,
+    FIELDS_STRING,
+    INFO_ITEM_NAMES,
+)
 
 
 class DashboardTransformer:
     """Build derived dashboard datasets from narrowed repository output."""
+
+    @staticmethod
+    def transform_info_items(stock_info: pl.DataFrame) -> pl.DataFrame:
+        """Select, categorize, and display-format configured stock information."""
+        categories = pl.DataFrame(
+            {
+                "itemName": INFO_ITEM_NAMES,
+                "itemCategory": [
+                    category
+                    for category, item_names in FIELDS_BY_CATEGORY.items()
+                    for _ in item_names
+                ],
+            }
+        )
+        return (
+            stock_info
+            .join(
+                categories,
+                on="itemName",
+                how="inner",
+                maintain_order="left",
+            )
+            .with_columns(
+                pl.struct(["itemName", "itemValue"])
+                .map_elements(
+                    DashboardTransformer._format_info_item_value,
+                    return_dtype=pl.String,
+                )
+                .alias("itemValue")
+            )
+            .select("stockSymbol", "itemName", "itemValue", "itemCategory")
+        )
 
     @staticmethod
     def transform_options_last(
@@ -91,7 +135,7 @@ class DashboardTransformer:
         """Return per-symbol dividend yields from stock-info rows."""
         return (
             stock_info
-            .filter(pl.col("itemName").is_in(["Dividend Yield", "dividendYield"]))
+            .filter(pl.col("itemName").is_in(DIVIDEND_YIELD_NAMES))
             .with_columns(
                 pl.col("itemValue")
                 .cast(pl.Utf8)
@@ -103,6 +147,20 @@ class DashboardTransformer:
             .select([pl.col("stockSymbol"), pl.col("dividendYield")])
             .unique(subset=["stockSymbol"], keep="last")
         )
+
+    @staticmethod
+    def _format_info_item_value(item: dict) -> str | None:
+        """Decode and display-format one serialized stock-info value."""
+        value = json.loads(item["itemValue"])
+        if value is None:
+            return None
+        if item["itemName"] in FIELDS_NUMERIC:
+            return f"{float(value):,.2f}".rstrip("0").rstrip(".")
+        if item["itemName"] in FIELDS_DATE:
+            return datetime.fromtimestamp(value).strftime("%Y-%m-%d")
+        if item["itemName"] in FIELDS_STRING:
+            return str(value)
+        raise ValueError(f"Missing stock-info field type: {item['itemName']}")
 
     @staticmethod
     def _risk_free_rate_expr(

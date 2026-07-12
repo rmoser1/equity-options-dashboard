@@ -43,7 +43,8 @@ The package has two one-shot entry points:
    - Inserts SQLModel rows into SQLite.
 
 2. **`dashboard_data_main.py`: dashboard data phase**
-   - Reads only the SQLite columns and date slices required for each output.
+   - Reads only the SQLite columns, stock-info items, and date slices required
+     for each output.
    - Writes dashboard parquet datasets incrementally to keep peak memory lower.
    - Builds the enriched latest-options dataset after the larger passthrough
      datasets have already been written.
@@ -262,6 +263,7 @@ data_retrieval/
 - `etl/services/` contains shared ETL helpers such as concurrent volume fetches.
 - `etl/pipelines/` coordinates each load step and database insert.
 - `schemas/` defines SQLModel tables.
+- `dashboard_data/info_item_fields.py` defines exported stock-info fields and categories.
 - `dashboard_data/repository.py` reads SQLite data into Polars.
 - `dashboard_data/transformer.py` builds dashboard-ready DataFrames.
 - `dashboard_data/writer.py` writes parquet outputs.

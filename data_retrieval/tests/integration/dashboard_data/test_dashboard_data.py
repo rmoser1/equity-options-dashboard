@@ -7,6 +7,7 @@ import polars as pl
 import pytest
 
 from dashboard_data.dashboard_data_app import App
+from dashboard_data.info_item_fields import DIVIDEND_YIELD_NAMES, INFO_ITEM_NAMES
 from dashboard_data.pipeline import DashboardPipeline
 from dashboard_data.repository import DashboardRepository
 from dashboard_data.transformer import DashboardTransformer
@@ -44,7 +45,13 @@ OPTION_HISTORY_COLUMNS = [
     "openInterest",
 ]
 STOCK_PRICE_COLUMNS = ["symbol", "date", "close", "volume"]
-DASHBOARD_DATASETS = ["stocks", "options_hist", "options_last", "stock_info", "stock_prices"]
+DASHBOARD_DATASETS = [
+    "stocks",
+    "options_hist",
+    "options_last",
+    "stock_info",
+    "stock_prices",
+]
 PARQUET_FILES = sorted(f"{key}.parquet" for key in DASHBOARD_DATASETS)
 
 
@@ -73,15 +80,30 @@ def seeded_dashboard_db(dashboard_db):
     return dashboard_db
 
 
-def seed_dashboard_rows(db, strike: float = 100.0):
+def seed_dashboard_rows(
+    db,
+    strike: float = 100.0,
+    include_dividend: bool = True,
+):
     """Insert the baseline dashboard dataset."""
     db.insert_many([Underlying(symbol=SYMBOL, name="Apple")])
-    db.insert_many(
-        [
-            StockInfoItem(stockSymbol=SYMBOL, itemName="sector", itemValue='"Technology"'),
-            StockInfoItem(stockSymbol=SYMBOL, itemName="Dividend Yield", itemValue="0.012"),
-        ]
-    )
+    stock_info = [
+        StockInfoItem(stockSymbol=SYMBOL, itemName="sector", itemValue='"Technology"'),
+        StockInfoItem(
+            stockSymbol=SYMBOL,
+            itemName="website",
+            itemValue='"https://example.com"',
+        ),
+    ]
+    if include_dividend:
+        stock_info.append(
+            StockInfoItem(
+                stockSymbol=SYMBOL,
+                itemName="dividendYield",
+                itemValue="0.012",
+            )
+        )
+    db.insert_many(stock_info)
     db.insert_many(
         [
             InterestRate(ticker="^IRX", name="13 Week Treasury Bill", date=TRADE_DATE, rate=0.04),
@@ -134,11 +156,20 @@ def test_repository_loads_dashboard_data_from_sqlite(seeded_dashboard_db):
         {"symbol": "AAPL", "name": "Apple"},
         {"symbol": "MSFT", "name": "Microsoft"},
     ]
-    assert repository.load_stock_info().sort("stockSymbol", "itemName").to_dicts() == [
-        {"stockSymbol": "AAPL", "itemName": "Dividend Yield", "itemValue": "0.012"},
+    assert repository.load_stock_info(
+        ["sector", "dividendYield"]
+    ).sort("stockSymbol", "itemName").to_dicts() == [
+        {"stockSymbol": "AAPL", "itemName": "dividendYield", "itemValue": "0.012"},
         {"stockSymbol": "AAPL", "itemName": "sector", "itemValue": '"Technology"'},
         {"stockSymbol": "MSFT", "itemName": "sector", "itemValue": '"Technology"'},
     ]
+    missing_info = repository.load_stock_info(["notARealField"])
+    assert missing_info.is_empty()
+    assert missing_info.schema == {
+        "stockSymbol": pl.String,
+        "itemName": pl.String,
+        "itemValue": pl.String,
+    }
     assert repository.load_interest_rates().sort("ticker").select("ticker", "rate").to_dicts() == [
         {"ticker": "^FVX", "rate": 0.05},
         {"ticker": "^IRX", "rate": 0.04},
@@ -171,6 +202,34 @@ def test_repository_loads_dashboard_data_from_sqlite(seeded_dashboard_db):
     assert stock_prices.select("symbol", "close", "volume").to_dicts() == [
         {"symbol": "AAPL", "close": 100.0, "volume": 1000}
     ]
+
+
+def test_repository_filters_stock_info_in_sql():
+    """Apply the requested item names before rows are loaded into Polars."""
+
+    class DatabaseStub:
+        statement = None
+
+        def query_polars(self, statement):
+            self.statement = statement
+            return pl.DataFrame(
+                schema={
+                    "stockSymbol": pl.String,
+                    "itemName": pl.String,
+                    "itemValue": pl.String,
+                }
+            )
+
+    repository = DashboardRepository.__new__(DashboardRepository)
+    repository.db = DatabaseStub()
+
+    repository.load_stock_info(["sector"])
+
+    sql = str(
+        repository.db.statement.compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "WHERE" in sql
+    assert '"stockInfo"."itemName" IN (\'sector\')' in sql
 
 
 def test_repository_omits_non_dashboard_columns(seeded_dashboard_db):
@@ -262,12 +321,23 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
         def load_stocks(self):
             return self._load("load_stocks", pl.DataFrame({"symbol": [SYMBOL]}))
 
-        def load_stock_info(self):
-            return self._load(
-                "load_stock_info",
-                pl.DataFrame(
-                    {"stockSymbol": [SYMBOL], "itemName": ["sector"], "itemValue": ['"Tech"']}
-                ),
+        def load_stock_info(self, item_names):
+            self.calls.append(("load_stock_info", item_names))
+            if item_names == DIVIDEND_YIELD_NAMES:
+                return pl.DataFrame(
+                    {
+                        "stockSymbol": [SYMBOL],
+                        "itemName": ["dividendYield"],
+                        "itemValue": ["0.012"],
+                    }
+                )
+            assert item_names == INFO_ITEM_NAMES
+            return pl.DataFrame(
+                {
+                    "stockSymbol": [SYMBOL],
+                    "itemName": ["sector"],
+                    "itemValue": ['"Tech"'],
+                }
             )
 
         def load_stock_prices(self):
@@ -301,10 +371,21 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
             )
 
     class TransformerStub:
+        def __init__(self):
+            self.calls = []
+
+        def transform_info_items(self, stock_info):
+            self.calls.append("transform_info_items")
+            assert stock_info.select("itemName").item() == "sector"
+            return stock_info.with_columns(
+                pl.lit("company_profile").alias("itemCategory")
+            )
+
         def transform_options_last(self, options, last_stock_price, stock_info, interest_rates):
+            self.calls.append("transform_options_last")
             assert options.select("contractSymbol").item() == CONTRACT_SYMBOL
             assert last_stock_price.select("lastStockPrice").item() == 100.0
-            assert stock_info.select("stockSymbol").item() == SYMBOL
+            assert stock_info.select("itemName").item() == "dividendYield"
             assert interest_rates.select("ticker").to_series().to_list() == ["^IRX", "^FVX"]
             return pl.DataFrame({"contractSymbol": [CONTRACT_SYMBOL], "relativeStrikePrice": [1.1]})
 
@@ -316,24 +397,29 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
             self.calls.append((key, data.height))
 
     repository = RepositoryStub()
+    transformer = TransformerStub()
     writer = WriterStub()
 
     DashboardPipeline(
         repository=repository,
-        transformer=TransformerStub(),
+        transformer=transformer,
         writer=writer,
     ).run()
 
     assert repository.calls == [
         "load_stocks",
-        "load_stock_info",
+        ("load_stock_info", INFO_ITEM_NAMES),
         "load_stock_prices",
         "load_options_history",
         "latest_option_trade_date",
         ("load_latest_options", TRADE_DATE),
         ("load_latest_stock_prices", TRADE_DATE),
-        "load_stock_info",
+        ("load_stock_info", DIVIDEND_YIELD_NAMES),
         "load_interest_rates",
+    ]
+    assert transformer.calls == [
+        "transform_info_items",
+        "transform_options_last",
     ]
     assert writer.calls == [
         ("stocks", 1),
@@ -357,6 +443,19 @@ def test_pipeline_reads_transforms_and_writes_parquet(tmp_path, dashboard_db):
         writer=ParquetWriter(str(output_dir)),
     ).run()
 
+    stock_info = pl.read_parquet(output_dir / "stock_info.parquet")
+    assert stock_info.select("itemName", "itemValue", "itemCategory").to_dicts() == [
+        {
+            "itemName": "sector",
+            "itemValue": "Technology",
+            "itemCategory": "company_profile",
+        },
+        {
+            "itemName": "dividendYield",
+            "itemValue": "0.01",
+            "itemCategory": "dividends_corporate_events",
+        },
+    ]
     options_last = pl.read_parquet(output_dir / "options_last.parquet")
     assert options_last.select(
         "contractSymbol",
@@ -373,6 +472,26 @@ def test_pipeline_reads_transforms_and_writes_parquet(tmp_path, dashboard_db):
             "timeToExpiryYears": round(14 / 365, 6),
         }
     ]
+
+
+def test_pipeline_defaults_dividend_yield_when_stock_info_is_missing(
+    tmp_path,
+    dashboard_db,
+):
+    """Enrich latest options when the dividend query returns no rows."""
+    db_path, db = dashboard_db
+    output_dir = tmp_path / "parquet"
+    output_dir.mkdir()
+    seed_dashboard_rows(db, include_dividend=False)
+
+    DashboardPipeline(
+        repository=DashboardRepository(str(db_path)),
+        transformer=DashboardTransformer(),
+        writer=ParquetWriter(str(output_dir)),
+    ).run()
+
+    options_last = pl.read_parquet(output_dir / "options_last.parquet")
+    assert options_last.select("dividendYield").item() == 0.0
 
 
 def test_app_creates_output_dir_and_writes_dashboard_parquet(tmp_path, dashboard_db):

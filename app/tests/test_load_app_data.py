@@ -16,8 +16,8 @@ def test_load_app_data_prepares_filter_and_component_data(dashboard_parquet_dir)
     assert data["last_trade_date"] == "2026-06-19"
 
 
-def test_load_app_data_formats_stock_info_values(dashboard_parquet_dir):
-    """Verify JSON stock info values are decoded and display-formatted."""
+def test_load_app_data_uses_transformed_stock_info_metadata(dashboard_parquet_dir):
+    """Use display-ready values and derive ordered info-item controls."""
     data = load_app_data(dashboard_parquet_dir)
     stock_info = data["stock_info_df"]
 
@@ -28,3 +28,19 @@ def test_load_app_data_formats_stock_info_values(dashboard_parquet_dir):
     assert values[("SPY", "longName")] == "SPDR S&P 500 ETF Trust"
     assert values[("SPY", "marketCap")] == "1,000,000"
     assert values[("SPY", "lastFiscalYearEnd")] == "2026-07-17"
+    assert list(stock_info.columns) == [
+        "stockSymbol",
+        "itemName",
+        "itemValue",
+        "itemCategory",
+    ]
+    assert data["info_items_by_category"] == {
+        "company_profile": ["longName", "country"],
+        "valuation": ["marketCap"],
+        "dividends_corporate_events": ["lastFiscalYearEnd"],
+    }
+    assert data["info_items_categories"] == [
+        "company_profile",
+        "valuation",
+        "dividends_corporate_events",
+    ]

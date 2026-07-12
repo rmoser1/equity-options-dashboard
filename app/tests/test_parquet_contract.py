@@ -45,3 +45,8 @@ def test_options_last_contract_requires_metric_columns():
         "vega",
         "rho",
     }.issubset(required_columns)
+
+
+def test_stock_info_contract_requires_selector_metadata():
+    """Require category metadata in the stock-info dataset."""
+    assert "itemCategory" in DATASETS["stock_info"].required_columns

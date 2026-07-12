@@ -1,4 +1,4 @@
-"""Stock information fields shown in dashboard controls and tables."""
+"""Stock information fields exported for dashboard controls and tables."""
 
 FIELDS_BY_CATEGORY = {
   "company_profile": [
@@ -168,6 +168,8 @@ FIELDS_STRING = [
   "sector",
   "industry",
   "longBusinessSummary",
+  "fiftyTwoWeekRange",
+  "lastSplitFactor",
 ]
 
 FIELDS_DATE = [
@@ -177,3 +179,11 @@ FIELDS_DATE = [
   "lastDividendDate",
   "lastSplitDate"
 ]
+
+INFO_ITEM_NAMES = [
+  item_name
+  for item_names in FIELDS_BY_CATEGORY.values()
+  for item_name in item_names
+]
+
+DIVIDEND_YIELD_NAMES = ["dividendYield", "Dividend Yield"]
