@@ -46,6 +46,10 @@ def load_app_data(parquet_folder: str = "data/parquet") -> dict:
         options_last["relativeStrikePrice"].min(),
         options_last["relativeStrikePrice"].max(),
     ]
+    cost_per_contract_range = [
+        options_last["costPerContract"].min(),
+        options_last["costPerContract"].max(),
+    ]
 
     logger.info("Returning dashboard app data")
 
@@ -63,6 +67,7 @@ def load_app_data(parquet_folder: str = "data/parquet") -> dict:
         "expiration_dates_dict": expiration_options,
         "stock_tickers_dict": stock_options,
         "relative_strike_price_range": relative_strike_price_range,
+        "cost_per_contract_range": cost_per_contract_range,
         "info_items_by_category": info_items_by_category,
         "info_items_categories": list(info_items_by_category),
     }

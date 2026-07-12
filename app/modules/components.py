@@ -28,6 +28,7 @@ class FilterComponents:
     direction: dcc.RadioItems
     expiration_dates: dcc.Dropdown
     relative_strike_price_range: dcc.RangeSlider
+    cost_per_contract_range: dcc.RangeSlider
     multiple_stock_selection: dcc.Dropdown
     single_stock_selection: dcc.Dropdown
     contract_single_stock_selection: dcc.Dropdown
@@ -136,6 +137,7 @@ def _filter_components(data: dict) -> FilterComponents:
     """Declare dashboard filters."""
     expiration_dates = data["expiration_dates_datetime"]
     relative_strike_range = data["relative_strike_price_range"]
+    cost_per_contract_range = data["cost_per_contract_range"]
 
     return FilterComponents(
         direction=dcc.RadioItems(
@@ -160,6 +162,16 @@ def _filter_components(data: dict) -> FilterComponents:
             updatemode="mouseup",
             tooltip={"placement": "bottom", "always_visible": True},
             id="SELECTOR_RelativeStrikePriceRangeSlider",
+        ),
+        cost_per_contract_range=dcc.RangeSlider(
+            min=cost_per_contract_range[0],
+            max=cost_per_contract_range[1],
+            value=cost_per_contract_range,
+            step=1,
+            marks=None,
+            updatemode="mouseup",
+            tooltip={"placement": "bottom", "always_visible": True},
+            id="SELECTOR_CostPerContractRangeSlider",
         ),
         multiple_stock_selection=dcc.Dropdown(
             options=data["stock_tickers_dict"],

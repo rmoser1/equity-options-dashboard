@@ -13,6 +13,7 @@ def test_load_app_data_prepares_filter_and_component_data(dashboard_parquet_dir)
     ]
     assert [item["value"] for item in data["stock_tickers_dict"]] == ["MSFT", "SPY"]
     assert data["relative_strike_price_range"] == [0.9423, 0.9808]
+    assert data["cost_per_contract_range"] == [450.0, 750.0]
     assert data["last_trade_date"] == "2026-06-19"
 
 

@@ -27,6 +27,7 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "CALL",
         ["2026-07-17T00:00:00"],
         [0.95, 0.98],
+        [450.0, 750.0],
     )
 
     single_stock = pd.read_json(
@@ -47,6 +48,7 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "CALL",
         "2026-07-17",
         "Strike 0.95-0.98",
+        "Cost $450-$750",
         "Matches 2",
     ]
     assert [chip.children for chip in result["single_stock_filter_summary"]] == [
@@ -54,6 +56,7 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "CALL",
         "2026-07-17",
         "Strike 0.95-0.98",
+        "Cost $450-$750",
         "Matches 1",
     ]
     assert [chip.children for chip in result["contract_filter_summary"]] == [
@@ -61,6 +64,7 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "CALL",
         "2026-07-17",
         "Strike 0.95-0.98",
+        "Cost $450-$750",
         "Matches 1",
     ]
     assert [chip.children for chip in result["metric_filter_summary"]] == [
@@ -68,8 +72,39 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "CALL",
         "2026-07-17",
         "Strike 0.95-0.98",
+        "Cost $450-$750",
         "Matches 1",
     ]
+
+
+def test_option_filter_callback_filters_cost_per_contract_range(app):
+    """Verify cost bounds are applied inclusively to shared option stores."""
+    callback = _callback_by_name(app, "options_callback")
+
+    result = callback(
+        "SPY",
+        ["SPY", "MSFT"],
+        "CALL",
+        ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
+        [0.95, 0.99],
+        [500.0, 600.0],
+    )
+
+    single_stock = pd.read_json(
+        StringIO(result["filtered_options_single_stock"]),
+        orient="split",
+    )
+    multiple_stocks = pd.read_json(
+        StringIO(result["filtered_options_multiple_stocks"]),
+        orient="split",
+    )
+
+    assert single_stock["contractSymbol"].tolist() == ["SPY260717C00500000"]
+    assert multiple_stocks["contractSymbol"].tolist() == [
+        "SPY260717C00500000",
+        "MSFT260717C00350000",
+    ]
+    assert result["multiple_stock_filter_summary"][-2].children == "Cost $500-$600"
 
 
 def test_option_filter_callback_includes_all_selected_stocks(app):
@@ -82,6 +117,7 @@ def test_option_filter_callback_includes_all_selected_stocks(app):
         "CALL",
         ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
         [0.9423, 0.9808],
+        [450.0, 750.0],
     )
 
     multiple_stocks = pd.read_json(
@@ -107,6 +143,7 @@ def test_option_filter_callback_clears_store_when_no_contracts_match(app):
         "CALL",
         ["2026-07-17T00:00:00"],
         [0.1, 0.2],
+        [450.0, 750.0],
     )
 
     single_stock = pd.read_json(
@@ -134,6 +171,7 @@ def test_contract_selection_callback_preselects_last_contract(app):
         "CALL",
         ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
         [0.95, 0.99],
+        [450.0, 750.0],
     )
 
     result = selection_callback(filter_result["filtered_options_single_stock"])
@@ -154,6 +192,7 @@ def test_option_store_reader_restores_date_columns(app):
         "CALL",
         ["2026-07-17T00:00:00"],
         [0.95, 0.98],
+        [450.0, 750.0],
     )
 
     result = _read_store(filter_result["filtered_options_single_stock"])
@@ -189,6 +228,7 @@ def test_single_stock_option_callback_builds_summary_and_heatmaps(app):
         "CALL",
         ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
         [0.95, 0.99],
+        [450.0, 750.0],
     )
 
     result = chart_callback(
@@ -214,6 +254,7 @@ def test_option_metric_callback_builds_six_metric_figures(app):
         "CALL",
         ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
         [0.95, 0.99],
+        [450.0, 750.0],
     )
 
     result = metric_callback(
@@ -243,6 +284,7 @@ def test_option_metric_callback_restores_expiration_dates(app):
         "CALL",
         ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
         [0.95, 0.99],
+        [450.0, 750.0],
     )
 
     result = metric_callback(

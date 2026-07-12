@@ -171,6 +171,10 @@ def _register_option_filter_callback(
                 components.filters.relative_strike_price_range,
                 "value",
             ),
+            cost_per_contract_range=Input(
+                components.filters.cost_per_contract_range,
+                "value",
+            ),
         ),
     )
     def options_callback(
@@ -179,6 +183,7 @@ def _register_option_filter_callback(
         direction,
         selected_expiration_dates,
         relativeStrikePrice_Range,
+        cost_per_contract_range,
     ):
         selected_stocks = selected_stocks or []
         selected_expiration_dates = selected_expiration_dates or []
@@ -195,6 +200,12 @@ def _register_option_filter_callback(
                 options["relativeStrikePrice"].between(
                     relativeStrikePrice_Range[0],
                     relativeStrikePrice_Range[1],
+                )
+            )
+            & (
+                options["costPerContract"].between(
+                    cost_per_contract_range[0],
+                    cost_per_contract_range[1],
                 )
             )
         ]
@@ -221,6 +232,7 @@ def _register_option_filter_callback(
                 direction=direction,
                 selected_expiration_dates=selected_expiration_dates,
                 relative_strike_range=relativeStrikePrice_Range,
+                cost_per_contract_range=cost_per_contract_range,
                 n_contracts=n_contracts_multiple_stocks,
             ),
             single_stock_filter_summary=_filter_summary(
@@ -228,6 +240,7 @@ def _register_option_filter_callback(
                 direction=direction,
                 selected_expiration_dates=selected_expiration_dates,
                 relative_strike_range=relativeStrikePrice_Range,
+                cost_per_contract_range=cost_per_contract_range,
                 n_contracts=n_contracts_single_stock,
             ),
             contract_filter_summary=_filter_summary(
@@ -235,6 +248,7 @@ def _register_option_filter_callback(
                 direction=direction,
                 selected_expiration_dates=selected_expiration_dates,
                 relative_strike_range=relativeStrikePrice_Range,
+                cost_per_contract_range=cost_per_contract_range,
                 n_contracts=n_contracts_single_stock,
             ),
             metric_filter_summary=_filter_summary(
@@ -242,6 +256,7 @@ def _register_option_filter_callback(
                 direction=direction,
                 selected_expiration_dates=selected_expiration_dates,
                 relative_strike_range=relativeStrikePrice_Range,
+                cost_per_contract_range=cost_per_contract_range,
                 n_contracts=n_contracts_single_stock,
             ),
         )
@@ -415,6 +430,7 @@ def _filter_summary(
     direction: str,
     selected_expiration_dates,
     relative_strike_range: list[float],
+    cost_per_contract_range: list[float],
     n_contracts: int,
 ) -> list:
     """Create active option filter summary chips."""
@@ -427,6 +443,10 @@ def _filter_summary(
         direction,
         expiration_text,
         f"Strike {relative_strike_range[0]:.2f}-{relative_strike_range[1]:.2f}",
+        (
+            f"Cost ${cost_per_contract_range[0]:,.0f}-"
+            f"${cost_per_contract_range[1]:,.0f}"
+        ),
         f"Matches {n_contracts:,}",
     ]
     return [html.Span(chip, className="filter-chip") for chip in chips]

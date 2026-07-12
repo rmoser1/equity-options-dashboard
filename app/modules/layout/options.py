@@ -56,6 +56,11 @@ def option_filter_layout(components: ComponentGroups):
                 components.filters.relative_strike_price_range,
                 className="field-group field-fill",
             ),
+            _field(
+                "Cost per contract",
+                components.filters.cost_per_contract_range,
+                className="field-group field-wide",
+            ),
         ],
         id="PANEL_OptionFilters",
         className="filter-band",

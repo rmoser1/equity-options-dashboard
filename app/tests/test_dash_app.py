@@ -157,6 +157,7 @@ def test_create_app_shares_option_filters_across_option_tabs(app):
         "SELECTOR_DirectionRadioItems",
         "SELECTOR_ExpirationDateDropdown",
         "SELECTOR_RelativeStrikePriceRangeSlider",
+        "SELECTOR_CostPerContractRangeSlider",
     }.issubset(shared_filter_ids)
     assert "SELECTOR_StockSelectionDropdown_SingleStock" not in shared_filter_ids
     assert "SELECTOR_StockSelectionDropdown_MultipleStocks" not in shared_filter_ids
@@ -171,6 +172,10 @@ def test_option_filters_use_static_loaded_data(app):
         app.layout,
         "SELECTOR_RelativeStrikePriceRangeSlider",
     )
+    cost_per_contract_slider = _component_by_id(
+        app.layout,
+        "SELECTOR_CostPerContractRangeSlider",
+    )
 
     assert [option["label"] for option in expiration_dropdown.options] == [
         "2026-07-17",
@@ -183,6 +188,9 @@ def test_option_filters_use_static_loaded_data(app):
     assert relative_strike_slider.min == 0.9423
     assert relative_strike_slider.max == 0.9808
     assert relative_strike_slider.value == [0.9423, 0.9808]
+    assert cost_per_contract_slider.min == 450.0
+    assert cost_per_contract_slider.max == 750.0
+    assert cost_per_contract_slider.value == [450.0, 750.0]
     assert not any(
         metadata["callback"].__name__ == "option_filter_controls_callback"
         for metadata in app.callback_map.values()
