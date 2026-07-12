@@ -257,6 +257,28 @@ class Database:
         logger.debug("Running Polars database query")
         return pl.read_database(statement, self.engine)
 
+    def query_polars_batches(
+        self,
+        statement,
+        batch_size: int,
+        schema_overrides: dict[str, pl.DataType] | None = None,
+    ):
+        """Run a custom database query and yield Polars results in batches.
+
+        :param statement: Query to run against the database.
+        :param batch_size: Maximum number of rows per yielded DataFrame.
+        :param schema_overrides: Optional Polars schema overrides.
+        :returns: Iterator of Polars DataFrames.
+        """
+        logger.debug("Running batched Polars database query")
+        return pl.read_database(
+            statement,
+            self.engine,
+            iter_batches=True,
+            batch_size=batch_size,
+            schema_overrides=schema_overrides,
+        )
+
     def scalar(self, statement):
         """Run a query and return the first column of the first row.
 

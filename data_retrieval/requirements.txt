@@ -1,5 +1,6 @@
 pandas==2.2.2
 polars==1.41.0
+pyarrow==24.0.0
 yfinance==0.2.66
 aiohttp==3.13.5
 sqlmodel==0.0.38

@@ -331,6 +331,27 @@ def test_repository_loads_stock_prices_only_on_trade_date(
     assert result.to_dicts() == [{"symbol": SYMBOL, "lastStockPrice": 100.0}]
 
 
+def test_repository_yields_stock_info_in_batches(seeded_dashboard_db):
+    """Load stock-info rows in database-sized batches."""
+    db_path, db = seeded_dashboard_db
+    db.insert_many([Underlying(symbol="MSFT", name="Microsoft")])
+    db.insert_many([StockInfoItem(stockSymbol="MSFT", itemName="sector", itemValue='"Tech"')])
+
+    batches = list(
+        DashboardRepository(str(db_path)).iter_stock_info(
+            ["sector", "dividendYield"],
+            batch_size=1,
+        )
+    )
+
+    assert [batch.height for batch in batches] == [1, 1, 1]
+    assert pl.concat(batches).to_dicts() == [
+        {"stockSymbol": "AAPL", "itemName": "sector", "itemValue": '"Technology"'},
+        {"stockSymbol": "AAPL", "itemName": "dividendYield", "itemValue": "1.2"},
+        {"stockSymbol": "MSFT", "itemName": "sector", "itemValue": '"Tech"'},
+    ]
+
+
 def test_writer_writes_datasets_to_expected_parquet_files(tmp_path):
     """Write one parquet file per dashboard dataset."""
     writer = ParquetWriter(str(tmp_path))
@@ -339,6 +360,26 @@ def test_writer_writes_datasets_to_expected_parquet_files(tmp_path):
         writer.write_dataset(key, pl.DataFrame({"value": [1]}))
 
     assert sorted(path.name for path in tmp_path.iterdir()) == PARQUET_FILES
+
+
+def test_writer_writes_batched_dataset_to_parquet(tmp_path):
+    """Write one parquet file incrementally from DataFrame batches."""
+    writer = ParquetWriter(str(tmp_path))
+    batches = [
+        pl.DataFrame({"value": [1]}),
+        pl.DataFrame({"value": [2]}),
+    ]
+
+    writer.write_dataset_batches(
+        "stock_info",
+        batches,
+        empty=pl.DataFrame(schema={"value": pl.Int64}),
+    )
+
+    assert pl.read_parquet(tmp_path / "stock_info.parquet").to_dicts() == [
+        {"value": 1},
+        {"value": 2},
+    ]
 
 
 def test_pipeline_writes_memory_efficient_datasets_incrementally():
@@ -352,21 +393,18 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
             self.calls.append(name)
             return data
 
-        def load_stocks(self):
-            return self._load("load_stocks", pl.DataFrame({"symbol": [SYMBOL]}))
+        def iter_stocks(self, batch_size):
+            self.calls.append(("iter_stocks", batch_size))
+            yield pl.DataFrame({"symbol": [SYMBOL]})
 
-        def load_stock_info(self, item_names):
-            self.calls.append(("load_stock_info", item_names))
-            if item_names == DIVIDEND_YIELD_NAMES:
-                return pl.DataFrame(
-                    {
-                        "stockSymbol": [SYMBOL],
-                        "itemName": ["dividendYield"],
-                        "itemValue": ["1.2"],
-                    }
-                )
+        def empty_stocks(self):
+            self.calls.append("empty_stocks")
+            return pl.DataFrame(schema={"symbol": pl.String})
+
+        def iter_stock_info(self, item_names, batch_size):
+            self.calls.append(("iter_stock_info", item_names, batch_size))
             assert item_names == INFO_ITEM_NAMES
-            return pl.DataFrame(
+            yield pl.DataFrame(
                 {
                     "stockSymbol": [SYMBOL],
                     "itemName": ["sector"],
@@ -374,25 +412,58 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
                 }
             )
 
-        def load_stock_prices(self):
-            return self._load(
-                "load_stock_prices",
-                pl.DataFrame({"symbol": [SYMBOL], "date": [TRADE_DATE], "close": [100.0]}),
+        def empty_stock_info(self):
+            self.calls.append("empty_stock_info")
+            return pl.DataFrame(
+                schema={
+                    "stockSymbol": pl.String,
+                    "itemName": pl.String,
+                    "itemValue": pl.String,
+                }
             )
 
-        def load_options_history(self):
-            return self._load(
-                "load_options_history",
-                pl.DataFrame({"contractSymbol": [CONTRACT_SYMBOL]}),
+        def load_stock_info(self, item_names):
+            self.calls.append(("load_stock_info", item_names))
+            assert item_names == DIVIDEND_YIELD_NAMES
+            return pl.DataFrame(
+                {
+                    "stockSymbol": [SYMBOL],
+                    "itemName": ["dividendYield"],
+                    "itemValue": ["1.2"],
+                }
             )
+
+        def iter_stock_prices(self, batch_size):
+            self.calls.append(("iter_stock_prices", batch_size))
+            yield pl.DataFrame(
+                {"symbol": [SYMBOL], "date": [TRADE_DATE], "close": [100.0]}
+            )
+
+        def empty_stock_prices(self):
+            self.calls.append("empty_stock_prices")
+            return pl.DataFrame(
+                schema={"symbol": pl.String, "date": pl.Date, "close": pl.Float64}
+            )
+
+        def iter_options_history(self, batch_size):
+            self.calls.append(("iter_options_history", batch_size))
+            yield pl.DataFrame({"contractSymbol": [CONTRACT_SYMBOL]})
+
+        def empty_options_history(self):
+            self.calls.append("empty_options_history")
+            return pl.DataFrame(schema={"contractSymbol": pl.String})
 
         def latest_option_trade_date(self):
             self.calls.append("latest_option_trade_date")
             return TRADE_DATE
 
-        def load_latest_options(self, last_trade_date):
-            self.calls.append(("load_latest_options", last_trade_date))
-            return pl.DataFrame({"contractSymbol": [CONTRACT_SYMBOL]})
+        def iter_latest_options(self, last_trade_date, batch_size):
+            self.calls.append(("iter_latest_options", last_trade_date, batch_size))
+            yield pl.DataFrame({"contractSymbol": [CONTRACT_SYMBOL]})
+
+        def empty_latest_options(self):
+            self.calls.append("empty_latest_options")
+            return pl.DataFrame(schema={"contractSymbol": pl.String})
 
         def load_latest_stock_prices(self, last_trade_date):
             self.calls.append(("load_latest_stock_prices", last_trade_date))
@@ -410,6 +481,10 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
 
         def transform_info_items(self, stock_info):
             self.calls.append("transform_info_items")
+            if stock_info.is_empty():
+                return stock_info.with_columns(
+                    pl.Series("itemCategory", [], dtype=pl.String)
+                )
             assert stock_info.select("itemName").item() == "sector"
             return stock_info.with_columns(
                 pl.lit("company_profile").alias("itemCategory")
@@ -417,6 +492,10 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
 
         def transform_options_last(self, options, last_stock_price, stock_info, interest_rates):
             self.calls.append("transform_options_last")
+            if options.is_empty():
+                return options.with_columns(
+                    pl.Series("relativeStrikePrice", [], dtype=pl.Float64)
+                )
             assert options.select("contractSymbol").item() == CONTRACT_SYMBOL
             assert last_stock_price.select("lastStockPrice").item() == 100.0
             assert stock_info.select("itemName").item() == "dividendYield"
@@ -430,6 +509,10 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
         def write_dataset(self, key, data):
             self.calls.append((key, data.height))
 
+        def write_dataset_batches(self, key, batches, empty):
+            heights = [batch.height for batch in batches]
+            self.calls.append((key, heights, empty.height))
+
     repository = RepositoryStub()
     transformer = TransformerStub()
     writer = WriterStub()
@@ -441,26 +524,33 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
     ).run()
 
     assert repository.calls == [
-        "load_stocks",
-        ("load_stock_info", INFO_ITEM_NAMES),
-        "load_stock_prices",
-        "load_options_history",
+        "empty_stocks",
+        ("iter_stocks", DashboardPipeline.DATASET_BATCH_SIZE),
+        "empty_stock_info",
+        ("iter_stock_info", INFO_ITEM_NAMES, DashboardPipeline.STOCK_INFO_BATCH_SIZE),
+        "empty_stock_prices",
+        ("iter_stock_prices", DashboardPipeline.DATASET_BATCH_SIZE),
+        "empty_options_history",
+        ("iter_options_history", DashboardPipeline.DATASET_BATCH_SIZE),
         "latest_option_trade_date",
-        ("load_latest_options", TRADE_DATE),
         ("load_latest_stock_prices", TRADE_DATE),
         ("load_stock_info", DIVIDEND_YIELD_NAMES),
         "load_interest_rates",
+        "empty_latest_options",
+        ("iter_latest_options", TRADE_DATE, DashboardPipeline.DATASET_BATCH_SIZE),
     ]
     assert transformer.calls == [
         "transform_info_items",
+        "transform_info_items",
+        "transform_options_last",
         "transform_options_last",
     ]
     assert writer.calls == [
-        ("stocks", 1),
-        ("stock_info", 1),
-        ("stock_prices", 1),
-        ("options_hist", 1),
-        ("options_last", 1),
+        ("stocks", [1], 0),
+        ("stock_info", [1], 0),
+        ("stock_prices", [1], 0),
+        ("options_hist", [1], 0),
+        ("options_last", [1], 0),
     ]
 
 

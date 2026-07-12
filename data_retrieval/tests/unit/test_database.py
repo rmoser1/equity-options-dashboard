@@ -333,6 +333,21 @@ def test_query_polars_accepts_select_statement(seeded_db):
     assert df.to_dicts() == [{"symbol": "AAPL"}, {"symbol": "MSFT"}]
 
 
+def test_query_polars_batches_yields_batched_results(seeded_db):
+    """Run a SQLAlchemy select statement and yield Polars batches."""
+    batches = list(
+        seeded_db.query_polars_batches(
+            select(Underlying.symbol).order_by(Underlying.symbol),
+            batch_size=1,
+        )
+    )
+
+    assert [batch.to_dicts() for batch in batches] == [
+        [{"symbol": "AAPL"}],
+        [{"symbol": "MSFT"}],
+    ]
+
+
 def test_scalar_returns_first_result(seeded_db):
     """Return the first scalar value from a query result.
 
