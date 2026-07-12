@@ -74,6 +74,7 @@ def test_option_filter_callback_filters_and_serializes_matches(app):
         "Strike 0.95-0.98",
         "Cost $450-$750",
         "Matches 1",
+        "Thereof 1 contract with valid calculated metrics",
     ]
 
 
@@ -159,6 +160,40 @@ def test_option_filter_callback_clears_store_when_no_contracts_match(app):
     assert multiple_stocks.empty
     assert result["single_stock_filter_summary"][-1].children == "Matches 0"
     assert result["multiple_stock_filter_summary"][-1].children == "Matches 0"
+    assert (
+        result["metric_filter_summary"][-1].children
+        == "Thereof 0 contracts with valid calculated metrics"
+    )
+
+
+def test_option_filter_callback_counts_only_complete_metric_rows(
+    dashboard_parquet_dir,
+):
+    """Count only contracts whose complete calculated metric set is available."""
+    options_path = dashboard_parquet_dir / "options_last.parquet"
+    options = pd.read_parquet(options_path)
+    options.loc[
+        options["contractSymbol"] == "SPY260821C00510000",
+        "delta",
+    ] = None
+    options.to_parquet(options_path, index=False)
+    app = create_app(AppConfig(dashboard_data_dir=str(dashboard_parquet_dir)))
+    callback = _callback_by_name(app, "options_callback")
+
+    result = callback(
+        "SPY",
+        ["SPY"],
+        "CALL",
+        ["2026-07-17T00:00:00", "2026-08-21T00:00:00"],
+        [0.95, 0.99],
+        [450.0, 750.0],
+    )
+
+    assert result["metric_filter_summary"][-2].children == "Matches 2"
+    assert (
+        result["metric_filter_summary"][-1].children
+        == "Thereof 1 contract with valid calculated metrics"
+    )
 
 
 def test_contract_selection_callback_preselects_last_contract(app):

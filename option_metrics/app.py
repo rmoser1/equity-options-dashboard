@@ -43,7 +43,12 @@ class OptionMetricsApp:
 
         logger.info("Calculating option metrics")
         metrics = OptionMetricsTransformer.transform(options)
-        logger.info("Calculated metrics for %s option rows", f"{len(metrics):,}")
+        calculated_rows = metrics[OptionMetricsTransformer.METRIC_COLUMNS].notna().all(axis=1).sum()
+        logger.info(
+            "Calculated metrics for %s/%s option rows",
+            f"{calculated_rows:,}",
+            f"{len(metrics):,}",
+        )
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.path.with_name(f"{self.path.name}.tmp")

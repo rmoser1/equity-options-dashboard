@@ -34,6 +34,54 @@ def test_transform_appends_metrics_to_options_dataframe():
     assert result.loc[0, "gamma"] > 0
 
 
+def test_transform_consumes_decimal_dividend_yield():
+    """Verify dashboard dividend yields reach the pricing model as decimals."""
+    options = pd.DataFrame(
+        [
+            {
+                "timeToExpiryYears": 30 / 365,
+                "strike": 100.0,
+                "ask": 2.8479303712546127,
+                "direction": "CALL",
+                "lastStockPrice": 100.0,
+                "riskFreeRate": 0.01,
+                "dividendYield": 0.012,
+            }
+        ]
+    )
+
+    result = OptionMetricsTransformer.transform(options)
+
+    assert result.loc[0, "calculatedImpliedVolatility"] == pytest.approx(
+        0.25,
+        rel=1e-8,
+    )
+
+
+def test_transform_expands_implied_volatility_search_bound():
+    """Solve quotes whose implied volatility exceeds the initial 500% bound."""
+    options = pd.DataFrame(
+        [
+            {
+                "timeToExpiryYears": 30 / 365,
+                "strike": 100.0,
+                "ask": 60.961774652657866,
+                "direction": "CALL",
+                "lastStockPrice": 100.0,
+                "riskFreeRate": 0.01,
+                "dividendYield": 0.012,
+            }
+        ]
+    )
+
+    result = OptionMetricsTransformer.transform(options)
+
+    assert result.loc[0, "calculatedImpliedVolatility"] == pytest.approx(
+        6.0,
+        rel=1e-8,
+    )
+
+
 def test_transform_sets_nan_metrics_for_invalid_rows():
     """Verify invalid rows do not prevent valid output generation."""
     options = pd.DataFrame(

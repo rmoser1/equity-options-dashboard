@@ -115,7 +115,7 @@ def test_transform_options_last_enriches_latest_options():
         {
             "stockSymbol": ["AAPL", "AAPL"],
             "itemName": ["sector", "Dividend Yield"],
-            "itemValue": ['"Tech"', "0.012"],
+            "itemValue": ['"Tech"', "0.98"],
         }
     )
     interest_rates = pl.DataFrame(
@@ -128,16 +128,20 @@ def test_transform_options_last_enriches_latest_options():
     )
     options = pl.DataFrame(
         {
-            "contractSymbol": ["NEW_SHORT", "NEW_LONG"],
-            "stockSymbol": ["AAPL", "AAPL"],
-            "lastTradeDate": [date(2026, 1, 2), date(2026, 1, 2)],
-            "expirationDate": [date(2026, 1, 16), date(2027, 1, 2)],
-            "strike": [110.0, 120.0],
-            "ask": [2.5, 3.0],
-            "volume": [20, 30],
-            "openInterest": [200, 300],
-            "contractSize": ["REGULAR", "REGULAR"],
-            "direction": ["CALL", "CALL"],
+            "contractSymbol": ["NEW_SHORT", "NEW_LONG", "NO_STOCK_PRICE"],
+            "stockSymbol": ["AAPL", "AAPL", "MSFT"],
+            "lastTradeDate": [date(2026, 1, 2)] * 3,
+            "expirationDate": [
+                date(2026, 1, 16),
+                date(2027, 1, 2),
+                date(2026, 1, 16),
+            ],
+            "strike": [110.0, 120.0, 100.0],
+            "ask": [2.5, 3.0, 1.0],
+            "volume": [20, 30, 10],
+            "openInterest": [200, 300, 100],
+            "contractSize": ["REGULAR"] * 3,
+            "direction": ["CALL"] * 3,
         }
     )
     last_stock_price = pl.DataFrame({"symbol": ["AAPL"], "lastStockPrice": [100.0]})
@@ -153,12 +157,13 @@ def test_transform_options_last_enriches_latest_options():
         row["contractSymbol"]: row
         for row in result.sort("contractSymbol").to_dicts()
     }
+    assert set(latest) == {"NEW_SHORT", "NEW_LONG"}
     short_option = latest["NEW_SHORT"]
     long_option = latest["NEW_LONG"]
     assert short_option["lastStockPrice"] == 100.0
     assert short_option["timeToExpiryYears"] == round(14 / 365, 6)
     assert short_option["riskFreeRate"] == 0.04
-    assert short_option["dividendYield"] == 0.012
+    assert short_option["dividendYield"] == 0.0098
     assert short_option["relativeStrikePrice"] == 1.1
     assert short_option["relativeOptionPrice"] == 0.025
     assert short_option["costPerContract"] == 250.0

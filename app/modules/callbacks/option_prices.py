@@ -13,6 +13,7 @@ from modules.plotly_figures.option_prices import (
     scatter_relativeOptionPrice_vs_expirationDate,
     scatter_relativeOptionPrice_vs_relativeStrikePrice,
 )
+from modules.parquet_contract import OPTION_METRIC_COLUMNS
 
 
 def register_option_price_callbacks(
@@ -219,6 +220,12 @@ def _register_option_filter_callback(
 
         n_contracts_single_stock = filtered_options_single_stock.shape[0]
         n_contracts_multiple_stocks = filtered_options_multiple_stocks.shape[0]
+        n_metric_contracts = int(
+            filtered_options_single_stock[list(OPTION_METRIC_COLUMNS)]
+            .notna()
+            .all(axis=1)
+            .sum()
+        )
 
         return dict(
             filtered_options_single_stock=filtered_options_single_stock.to_json(
@@ -258,6 +265,7 @@ def _register_option_filter_callback(
                 relative_strike_range=relativeStrikePrice_Range,
                 cost_per_contract_range=cost_per_contract_range,
                 n_contracts=n_contracts_single_stock,
+                n_metric_contracts=n_metric_contracts,
             ),
         )
 
@@ -432,6 +440,7 @@ def _filter_summary(
     relative_strike_range: list[float],
     cost_per_contract_range: list[float],
     n_contracts: int,
+    n_metric_contracts: int | None = None,
 ) -> list:
     """Create active option filter summary chips."""
     expirations = pd.to_datetime(selected_expiration_dates)
@@ -449,6 +458,12 @@ def _filter_summary(
         ),
         f"Matches {n_contracts:,}",
     ]
+    if n_metric_contracts is not None:
+        contract_label = "contract" if n_metric_contracts == 1 else "contracts"
+        chips.append(
+            f"Thereof {n_metric_contracts:,} {contract_label} "
+            "with valid calculated metrics"
+        )
     return [html.Span(chip, className="filter-chip") for chip in chips]
 
 

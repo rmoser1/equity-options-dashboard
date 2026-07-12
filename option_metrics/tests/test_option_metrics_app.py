@@ -24,12 +24,17 @@ def _options_frame() -> pd.DataFrame:
     )
 
 
-def test_app_enriches_options_last_under_dashboard_data_dir(tmp_path, monkeypatch):
+def test_app_enriches_options_last_under_dashboard_data_dir(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
     """Verify the app overwrites ``options_last.parquet`` with metrics."""
     parquet_dir = tmp_path / "parquet"
     parquet_dir.mkdir()
     _options_frame().to_parquet(parquet_dir / "options_last.parquet", index=False)
     monkeypatch.setenv("DASHBOARD_DATA_DIR", str(parquet_dir))
+    caplog.set_level(logging.INFO, logger="option_metrics.app")
 
     result = OptionMetricsApp().run()
 
@@ -40,6 +45,7 @@ def test_app_enriches_options_last_under_dashboard_data_dir(tmp_path, monkeypatc
     ].tolist()
     assert not (parquet_dir / "options_last.parquet.tmp").exists()
     assert not (parquet_dir / "options_metrics.parquet").exists()
+    assert "Calculated metrics for 1/1 option rows" in caplog.messages
 
 
 def test_configure_logging_writes_to_configured_file(tmp_path, monkeypatch):

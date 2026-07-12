@@ -100,7 +100,7 @@ def seed_dashboard_rows(
             StockInfoItem(
                 stockSymbol=SYMBOL,
                 itemName="dividendYield",
-                itemValue="0.012",
+                itemValue="1.2",
             )
         )
     db.insert_many(stock_info)
@@ -159,7 +159,7 @@ def test_repository_loads_dashboard_data_from_sqlite(seeded_dashboard_db):
     assert repository.load_stock_info(
         ["sector", "dividendYield"]
     ).sort("stockSymbol", "itemName").to_dicts() == [
-        {"stockSymbol": "AAPL", "itemName": "dividendYield", "itemValue": "0.012"},
+        {"stockSymbol": "AAPL", "itemName": "dividendYield", "itemValue": "1.2"},
         {"stockSymbol": "AAPL", "itemName": "sector", "itemValue": '"Technology"'},
         {"stockSymbol": "MSFT", "itemName": "sector", "itemValue": '"Technology"'},
     ]
@@ -297,6 +297,40 @@ def test_repository_loads_memory_efficient_dashboard_slices(seeded_dashboard_db)
     ]
 
 
+def test_repository_loads_stock_prices_only_on_trade_date(
+    seeded_dashboard_db,
+):
+    """Exclude stock prices before and after the requested trade date."""
+    db_path, db = seeded_dashboard_db
+    db.insert_many([Underlying(symbol="MSFT", name="Microsoft")])
+    db.insert_many(
+        [
+            HistoricalPrice(
+                date=OLD_TRADE_DATE,
+                symbol="MSFT",
+                open=190.0,
+                high=205.0,
+                low=188.0,
+                close=200.0,
+                volume=2000,
+            ),
+            HistoricalPrice(
+                date=date(2026, 1, 3),
+                symbol="MSFT",
+                open=200.0,
+                high=215.0,
+                low=198.0,
+                close=210.0,
+                volume=2100,
+            ),
+        ]
+    )
+
+    result = DashboardRepository(str(db_path)).load_latest_stock_prices(TRADE_DATE)
+
+    assert result.to_dicts() == [{"symbol": SYMBOL, "lastStockPrice": 100.0}]
+
+
 def test_writer_writes_datasets_to_expected_parquet_files(tmp_path):
     """Write one parquet file per dashboard dataset."""
     writer = ParquetWriter(str(tmp_path))
@@ -328,7 +362,7 @@ def test_pipeline_writes_memory_efficient_datasets_incrementally():
                     {
                         "stockSymbol": [SYMBOL],
                         "itemName": ["dividendYield"],
-                        "itemValue": ["0.012"],
+                        "itemValue": ["1.2"],
                     }
                 )
             assert item_names == INFO_ITEM_NAMES
@@ -452,7 +486,7 @@ def test_pipeline_reads_transforms_and_writes_parquet(tmp_path, dashboard_db):
         },
         {
             "itemName": "dividendYield",
-            "itemValue": "0.01",
+            "itemValue": "1.2",
             "itemCategory": "dividends_corporate_events",
         },
     ]

@@ -135,9 +135,16 @@ class OptionMetricsTransformer:
         dividend_yield: np.ndarray,
         lower_bound: float = 1e-6,
         upper_bound: float = 5.0,
+        max_upper_bound: float = 80.0,
         iterations: int = 80,
     ) -> np.ndarray:
         """Solve implied volatility for many option rows using bisection.
+
+        The solver expands each row's upper volatility bound until the
+        Black-Scholes price reaches the market price or ``max_upper_bound``.
+        It then bisects the bracketed interval, moving the lower bound up when
+        the model price is too low and the upper bound down otherwise.
+        Unbracketed rows return ``NaN``.
 
         :param is_call: Boolean array identifying call rows.
         :param market_price: Observed option prices.
@@ -147,13 +154,57 @@ class OptionMetricsTransformer:
         :param risk_free_rate: Continuously compounded risk-free rates.
         :param dividend_yield: Continuously compounded dividend yields.
         :param lower_bound: Lower volatility search bound.
-        :param upper_bound: Upper volatility search bound.
+        :param upper_bound: Initial upper volatility search bound.
+        :param max_upper_bound: Maximum volatility tested while searching for an interval containing the solution.
         :param iterations: Number of bisection iterations.
         :returns: Annualized implied volatility array.
         """
 
         lower = np.full_like(market_price, lower_bound, dtype=float)
         upper = np.full_like(market_price, upper_bound, dtype=float)
+
+        upper_price = OptionMetricsTransformer._black_scholes_prices(
+            is_call,
+            spot,
+            strike,
+            time_to_expiry,
+            upper,
+            risk_free_rate,
+            dividend_yield,
+        )
+        while True:
+            expand = (upper_price < market_price) & (upper < max_upper_bound)
+            if not expand.any():
+                break
+            upper = np.where(
+                expand,
+                np.minimum(upper * 2.0, max_upper_bound),
+                upper,
+            )
+            upper_price = OptionMetricsTransformer._black_scholes_prices(
+                is_call,
+                spot,
+                strike,
+                time_to_expiry,
+                upper,
+                risk_free_rate,
+                dividend_yield,
+            )
+
+        bracketed = upper_price >= market_price
+        result = np.full_like(market_price, np.nan, dtype=float)
+        if not bracketed.any():
+            return result
+
+        lower = lower[bracketed]
+        upper = upper[bracketed]
+        is_call = is_call[bracketed]
+        market_price = market_price[bracketed]
+        spot = spot[bracketed]
+        strike = strike[bracketed]
+        time_to_expiry = time_to_expiry[bracketed]
+        risk_free_rate = risk_free_rate[bracketed]
+        dividend_yield = dividend_yield[bracketed]
 
         for _ in range(iterations):
             midpoint = (lower + upper) / 2.0
@@ -170,7 +221,8 @@ class OptionMetricsTransformer:
             lower = np.where(too_low, midpoint, lower)
             upper = np.where(too_low, upper, midpoint)
 
-        return (lower + upper) / 2.0
+        result[bracketed] = (lower + upper) / 2.0
+        return result
 
     @staticmethod
     def _black_scholes_prices(

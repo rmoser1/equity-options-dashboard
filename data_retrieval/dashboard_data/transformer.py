@@ -67,15 +67,15 @@ class DashboardTransformer:
           expressed in years.
         - ``riskFreeRate``: interpolated decimal Treasury rate for the option's
           time to expiry.
-        - ``dividendYield``: decimal dividend yield from stock metadata,
-          defaulting to ``0.0`` when unavailable.
+        - ``dividendYield``: provider percentage-point dividend yield converted
+          to a decimal rate, defaulting to ``0.0`` when unavailable.
         - ``relativeStrikePrice``: strike divided by latest underlying price.
         - ``relativeOptionPrice``: ask divided by latest underlying price.
         - ``costPerContract``: ask price multiplied by 100 for regular contracts.
         - ``nominalPerContract``: underlying notional value for regular contracts.
 
         :param options: Latest option rows for the current trade date.
-        :param last_stock_price: Underlying close prices aligned to that trade date.
+        :param last_stock_price: Underlying close prices on that trade date.
         :param stock_info: Key-value stock metadata containing optional dividend yields.
         :param interest_rates: Latest Treasury yield anchors used for risk-free rates.
         :returns: Enriched latest option rows for dashboard and metrics exports.
@@ -94,7 +94,7 @@ class DashboardTransformer:
                 last_stock_price,
                 left_on="stockSymbol",
                 right_on="symbol",
-                how="left",
+                how="inner",
             )
             .join(
                 dividend_yields,
@@ -132,15 +132,18 @@ class DashboardTransformer:
 
     @staticmethod
     def _dividend_yields(stock_info: pl.DataFrame) -> pl.DataFrame:
-        """Return per-symbol dividend yields from stock-info rows."""
+        """Return provider percentage-point dividend yields as decimal rates."""
         return (
             stock_info
             .filter(pl.col("itemName").is_in(DIVIDEND_YIELD_NAMES))
             .with_columns(
-                pl.col("itemValue")
-                .cast(pl.Utf8)
-                .str.strip_chars('"')
-                .cast(pl.Float64, strict=False)
+                (
+                    pl.col("itemValue")
+                    .cast(pl.Utf8)
+                    .str.strip_chars('"')
+                    .cast(pl.Float64, strict=False)
+                    / 100.0
+                )
                 .fill_null(0.0)
                 .alias("dividendYield")
             )

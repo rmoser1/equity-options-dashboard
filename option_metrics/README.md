@@ -17,6 +17,7 @@ data/parquet/options_last.parquet
 
 Required columns are `timeToExpiryYears`, `strike`, `ask`, `direction`,
 `lastStockPrice`, `riskFreeRate`, and `dividendYield`.
+`riskFreeRate` and `dividendYield` are decimal rates, so `0.04` means 4%.
 
 ## Output
 
