@@ -67,5 +67,9 @@ class VolumeService:
         :returns: Tuple of symbol and aggregated option volume.
         """
         async with semaphore:
-            csv_text = await asyncio.to_thread(self.occ_client.fetch_volume_csv, date, symbol)
-            return symbol, VolumeTransformer.extract_volume(csv_text)
+            try:
+                csv_text = await asyncio.to_thread(self.occ_client.fetch_volume_csv, date, symbol)
+                return symbol, VolumeTransformer.extract_volume(csv_text)
+            except Exception:
+                logger.exception("Failed to fetch OCC volume for %s on %s", symbol, date)
+                return symbol, 0

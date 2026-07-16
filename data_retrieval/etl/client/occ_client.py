@@ -41,11 +41,14 @@ class OCCClient:
 
         logger.info("Downloading OCC underlyings")
 
-        resp = requests.get(url, params=params, timeout=self.timeout)
-        resp.raise_for_status()
-        logger.info("Downloaded OCC underlyings (%s bytes)", len(resp.content))
-
-        return resp.content
+        try:
+            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp.raise_for_status()
+            logger.info("Downloaded OCC underlyings (%s bytes)", len(resp.content))
+            return resp.content
+        except Exception:
+            logger.exception("Failed to download OCC underlyings")
+            return b""
 
     def fetch_volume_csv(self, date: str, symbol: str) -> str:
         """Fetch OCC option-volume CSV text for one underlying.
@@ -68,6 +71,10 @@ class OCCClient:
         }
 
         logger.debug("Fetching volume for %s", symbol)
-        resp = requests.get(url, params=params, timeout=self.timeout)
-        resp.raise_for_status()
-        return resp.text
+        try:
+            resp = requests.get(url, params=params, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.text
+        except Exception:
+            logger.exception("Failed to fetch OCC volume for %s on %s", symbol, date)
+            return ""

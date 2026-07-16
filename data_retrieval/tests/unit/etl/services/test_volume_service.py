@@ -1,15 +1,14 @@
 """Tests for :mod:`etl.services.volume_service`.
 
 These tests keep OCC volume fetching offline while exercising the service's
-request mapping, transformer delegation, error propagation, and concurrency
+request mapping, transformer delegation, error handling, and concurrency
 limit.
 """
 
 import asyncio
+import logging
 import threading
 import time
-
-import pytest
 
 from etl.services.volume_service import VolumeService
 
@@ -77,7 +76,7 @@ class ConcurrentOCCClientStub:
 
 
 class FailingOCCClientStub:
-    """Raise fetch errors to verify service error propagation."""
+    """Raise fetch errors to verify service error handling."""
 
     def fetch_volume_csv(self, date, symbol):
         """Raise a deterministic fetch failure.
@@ -143,15 +142,21 @@ def test_get_volumes_returns_empty_mapping_for_empty_symbols():
     assert client.calls == []
 
 
-def test_get_volumes_propagates_occ_client_errors():
-    """Verify fetch failures are surfaced to the caller."""
-    with pytest.raises(RuntimeError, match="failed to fetch AAPL"):
-        asyncio.run(
-            VolumeService(FailingOCCClientStub()).get_volumes(
-                ["AAPL"],
-                "20260102",
-            )
+def test_get_volumes_logs_occ_client_errors_and_returns_zero(caplog):
+    """Verify fetch failures do not stop the volume batch."""
+    caplog.set_level(logging.ERROR, logger="etl.services.volume_service")
+
+    result = asyncio.run(
+        VolumeService(FailingOCCClientStub()).get_volumes(
+            ["AAPL"],
+            "20260102",
         )
+    )
+
+    assert result == {"AAPL": 0}
+    assert "Failed to fetch OCC volume for AAPL on 20260102" in [
+        record.message for record in caplog.records
+    ]
 
 
 def test_get_volumes_limits_concurrent_occ_requests():

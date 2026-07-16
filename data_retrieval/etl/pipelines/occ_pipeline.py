@@ -36,45 +36,67 @@ class OCCPipeline:
 
     def run(self):
         """Run the OCC pipeline."""
-        underlyings = self._download_underlyings()
-        symbols = [u.symbol for u in underlyings]
-        report_date = self._report_date()
-        logger.info("Fetching OCC volumes for %s underlyings on %s", len(symbols), report_date)
-        volumes = asyncio.run(self.volume_service.get_volumes(symbols, report_date))
-        filtered = self._filter_by_volume(underlyings, volumes)
-        logger.info("Filtered OCC underlyings from %s to %s", len(underlyings), len(filtered))
-        option_volumes = self._option_volumes(filtered, volumes, report_date)
+        try:
+            underlyings = self._download_underlyings()
+            symbols = [u.symbol for u in underlyings]
+            report_date = self._report_date()
+            logger.info("Fetching OCC volumes for %s underlyings on %s", len(symbols), report_date)
+            volumes = asyncio.run(self.volume_service.get_volumes(symbols, report_date))
+            filtered = self._filter_by_volume(underlyings, volumes)
+            logger.info("Filtered OCC underlyings from %s to %s", len(underlyings), len(filtered))
+            option_volumes = self._option_volumes(filtered, volumes, report_date)
 
-        self.database.insert_many_ignore_duplicates(filtered)
-        self.database.insert_many_ignore_duplicates(option_volumes)
+            self.database.insert_many_ignore_duplicates(filtered)
+            self.database.insert_many_ignore_duplicates(option_volumes)
+        except Exception:
+            logger.exception("Failed to run OCC pipeline")
 
     def _download_underlyings(self):
         """Download and transform OCC underlyings."""
-        raw_file = self.occ_client.download_underlyings(download_field_codes())
-        underlyings = UnderlyingTransformer.transform(raw_file, download_field_descriptions())
-        logger.info("Parsed %s OCC underlyings", len(underlyings))
-        return underlyings
+        try:
+            raw_file = self.occ_client.download_underlyings(download_field_codes())
+            if not raw_file:
+                logger.warning("Skipping OCC underlyings transform because download returned no content")
+                return []
+
+            underlyings = UnderlyingTransformer.transform(raw_file, download_field_descriptions())
+            logger.info("Parsed %s OCC underlyings", len(underlyings))
+            return underlyings
+        except Exception:
+            logger.exception("Failed to download or transform OCC underlyings")
+            return []
 
     def _report_date(self) -> str:
         """Return the OCC report date in ``YYYYMMDD`` format."""
-        if self.date_provider:
-            return self.date_provider.get_date()
+        try:
+            if self.date_provider:
+                return self.date_provider.get_date()
+        except Exception:
+            logger.exception("Failed to get OCC report date from provider")
 
         return (pd.Timestamp.today() - pd.tseries.offsets.BDay(2)).strftime("%Y%m%d")
 
     def _filter_by_volume(self, underlyings, volumes: dict[str, int]):
         """Return underlyings meeting the configured volume threshold."""
-        return [u for u in underlyings if volumes.get(u.symbol, 0) >= self.volume_threshold]
+        try:
+            return [u for u in underlyings if volumes.get(u.symbol, 0) >= self.volume_threshold]
+        except Exception:
+            logger.exception("Failed to filter OCC underlyings by volume")
+            return []
 
     @staticmethod
     def _option_volumes(underlyings, volumes: dict[str, int], report_date: str) -> list[OptionVolume]:
         """Build aggregate option-volume rows."""
-        date_value = datetime.strptime(report_date, "%Y%m%d").date()
-        return [
-            OptionVolume(
-                symbol=u.symbol,
-                date=date_value,
-                volume=volumes[u.symbol],
-            )
-            for u in underlyings
-        ]
+        try:
+            date_value = datetime.strptime(report_date, "%Y%m%d").date()
+            return [
+                OptionVolume(
+                    symbol=u.symbol,
+                    date=date_value,
+                    volume=volumes[u.symbol],
+                )
+                for u in underlyings
+            ]
+        except Exception:
+            logger.exception("Failed to build OCC option-volume rows")
+            return []

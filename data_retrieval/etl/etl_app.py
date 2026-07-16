@@ -71,7 +71,10 @@ class App:
         """Run the full ETL workflow."""
         if getattr(self.config, "run_occ_pipeline", True):
             logger.info("Running OCC pipeline")
-            self.occ_pipeline.run()
+            try:
+                self.occ_pipeline.run()
+            except Exception:
+                logger.exception("OCC pipeline failed; continuing with existing underlyings")
         else:
             logger.info("Skipping OCC pipeline")
 

@@ -4,6 +4,7 @@ These tests keep client request construction deterministic and offline while
 the live OCC provider shape is covered by contract tests.
 """
 
+import logging
 from urllib.parse import urlparse
 
 from etl.client.occ_client import OCCClient
@@ -69,6 +70,21 @@ def test_download_underlyings_builds_request(monkeypatch):
     assert timeout == (5, 30)
 
 
+def test_download_underlyings_logs_errors_and_returns_empty_bytes(monkeypatch, caplog):
+    """Verify underlyings download failures return an empty payload."""
+    caplog.set_level(logging.ERROR, logger="etl.client.occ_client")
+
+    def fake_get(url, params, timeout):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr("etl.client.occ_client.requests.get", fake_get)
+
+    result = OCCClient(base_url="https://occ.test").download_underlyings("OS;US")
+
+    assert result == b""
+    assert "Failed to download OCC underlyings" in [record.message for record in caplog.records]
+
+
 def test_fetch_volume_csv_builds_request(monkeypatch):
     """Verify the option-volume CSV request and text return value."""
     call = None
@@ -102,3 +118,20 @@ def test_fetch_volume_csv_builds_request(monkeypatch):
         "porc": "BOTH",
     }
     assert timeout == (5, 30)
+
+
+def test_fetch_volume_csv_logs_errors_and_returns_empty_text(monkeypatch, caplog):
+    """Verify option-volume failures return empty CSV text."""
+    caplog.set_level(logging.ERROR, logger="etl.client.occ_client")
+
+    def fake_get(url, params, timeout):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr("etl.client.occ_client.requests.get", fake_get)
+
+    result = OCCClient(base_url="https://occ.test").fetch_volume_csv("20260102", "AAPL")
+
+    assert result == ""
+    assert "Failed to fetch OCC volume for AAPL on 20260102" in [
+        record.message for record in caplog.records
+    ]
